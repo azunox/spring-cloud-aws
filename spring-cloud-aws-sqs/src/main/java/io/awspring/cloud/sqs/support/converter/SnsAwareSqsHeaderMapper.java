@@ -46,7 +46,16 @@ public class SnsAwareSqsHeaderMapper extends SqsHeaderMapper {
 	private static final TypeReference<Map<String, SnsNotification.MessageAttribute>> SNS_MESSAGE_ATTRIBUTES_TYPE = new TypeReference<>() {
 	};
 
-	private final JsonMapper jsonMapper = new JsonMapper();
+	private final JsonMapper jsonMapper;
+
+	/**
+	 * Create a mapper using the application's configured JSON mapper.
+	 * @param jsonMapper the mapper used for message conversion; must not be null.
+	 */
+	public SnsAwareSqsHeaderMapper(JsonMapper jsonMapper) {
+		Assert.notNull(jsonMapper, "jsonMapper cannot be null");
+		this.jsonMapper = jsonMapper;
+	}
 
 	@Override
 	public MessageHeaders toHeaders(Message source) {

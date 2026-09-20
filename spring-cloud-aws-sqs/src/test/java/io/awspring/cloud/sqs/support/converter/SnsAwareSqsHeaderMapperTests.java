@@ -16,6 +16,7 @@
 package io.awspring.cloud.sqs.support.converter;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.awspring.cloud.sqs.listener.SqsHeaders;
 import java.util.Map;
@@ -28,6 +29,8 @@ import org.springframework.messaging.MessageHeaders;
 import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.services.sqs.model.Message;
 import software.amazon.awssdk.services.sqs.model.MessageAttributeValue;
+import tools.jackson.core.json.JsonReadFeature;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Tests for {@link SnsAwareSqsHeaderMapper}.
@@ -37,8 +40,29 @@ import software.amazon.awssdk.services.sqs.model.MessageAttributeValue;
 class SnsAwareSqsHeaderMapperTests {
 
 	@Test
+	void shouldRejectNullJsonMapper() {
+		assertThatThrownBy(() -> new SnsAwareSqsHeaderMapper(null)).isInstanceOf(IllegalArgumentException.class)
+				.hasMessage("jsonMapper cannot be null");
+	}
+
+	@Test
+	void shouldUseConfiguredJsonMapper() {
+		JsonMapper jsonMapper = JsonMapper.builder().enable(JsonReadFeature.ALLOW_JAVA_COMMENTS).build();
+		Message message = Message.builder().messageId(UUID.randomUUID().toString()).body("""
+				{
+				  // Accepted only by the application's configured mapper.
+				  "Type": "Notification", "Message": "payload",
+				  "MessageAttributes": {"attribute": {"Type": "String", "Value": "snsValue"}}
+				}
+				""").build();
+
+		assertThat(new SnsAwareSqsHeaderMapper(new JsonMapper()).toHeaders(message)).doesNotContainKey("attribute");
+		assertThat(new SnsAwareSqsHeaderMapper(jsonMapper).toHeaders(message)).containsEntry("attribute", "snsValue");
+	}
+
+	@Test
 	void shouldAddSnsMessageAttributes() {
-		SnsAwareSqsHeaderMapper mapper = new SnsAwareSqsHeaderMapper();
+		SnsAwareSqsHeaderMapper mapper = new SnsAwareSqsHeaderMapper(new JsonMapper());
 		Message message = Message.builder().body("""
 				{
 				  "Type": "Notification",
@@ -60,7 +84,7 @@ class SnsAwareSqsHeaderMapperTests {
 
 	@Test
 	void shouldPreferSqsMessageAttributesOverSnsMessageAttributes() {
-		SnsAwareSqsHeaderMapper mapper = new SnsAwareSqsHeaderMapper();
+		SnsAwareSqsHeaderMapper mapper = new SnsAwareSqsHeaderMapper(new JsonMapper());
 		Message message = Message.builder().body("""
 				{
 				  "Type": "Notification",
@@ -83,7 +107,7 @@ class SnsAwareSqsHeaderMapperTests {
 
 	@Test
 	void shouldIgnoreMessageAttributesInNonSnsPayload() {
-		SnsAwareSqsHeaderMapper mapper = new SnsAwareSqsHeaderMapper();
+		SnsAwareSqsHeaderMapper mapper = new SnsAwareSqsHeaderMapper(new JsonMapper());
 		Message message = Message.builder().body("""
 				{
 				  "Type": "ApplicationEvent",
@@ -105,7 +129,7 @@ class SnsAwareSqsHeaderMapperTests {
 			"{\"Type\":\"Notification\",\"Message\":\"payload\",\"MessageAttributes\":[]}" })
 	void shouldLeaveNonNotificationAndMalformedBodiesUnchanged(String body) {
 		Message message = Message.builder().messageId(UUID.randomUUID().toString()).body(body).build();
-		MessageHeaders headers = new SnsAwareSqsHeaderMapper().toHeaders(message);
+		MessageHeaders headers = new SnsAwareSqsHeaderMapper(new JsonMapper()).toHeaders(message);
 
 		assertThat(headers.getId()).isEqualTo(UUID.fromString(message.messageId()));
 		assertThat(headers.get(SqsHeaders.SQS_SOURCE_DATA_HEADER)).isSameAs(message);
@@ -113,7 +137,7 @@ class SnsAwareSqsHeaderMapperTests {
 
 	@Test
 	void shouldPreserveAdditionalHeadersAndNonUuidMessageIds() {
-		SnsAwareSqsHeaderMapper mapper = new SnsAwareSqsHeaderMapper();
+		SnsAwareSqsHeaderMapper mapper = new SnsAwareSqsHeaderMapper(new JsonMapper());
 		mapper.setConvertMessageIdToUuid(false);
 		mapper.setAdditionalHeadersFunction((message, accessor) -> {
 			accessor.setHeader("attribute", "custom");
@@ -142,7 +166,7 @@ class SnsAwareSqsHeaderMapperTests {
 				""").build();
 
 		assertThat(converter.toMessagingMessage(message, null).getHeaders()).doesNotContainKey("attribute");
-		converter.setHeaderMapper(new SnsAwareSqsHeaderMapper());
+		converter.setHeaderMapper(new SnsAwareSqsHeaderMapper(new JsonMapper()));
 		assertThat(converter.toMessagingMessage(message, null).getHeaders()).containsEntry("attribute", "snsValue");
 	}
 }
