@@ -145,66 +145,13 @@ class SqsHeaderMapperTests {
 	}
 
 	@Test
-	void shouldAddSnsMessageAttributes() {
-		SqsHeaderMapper mapper = new SqsHeaderMapper();
-		Message message = Message.builder().body("""
-				{
-				  "Type": "Notification",
-				  "Message": "payload",
-				  "MessageAttributes": {
-				    "stringAttribute": { "Type": "String", "Value": "myString" },
-				    "numberAttribute": { "Type": "Number.java.lang.Integer", "Value": "10" },
-				    "binaryAttribute": { "Type": "Binary", "Value": "bXlCaW5hcnk=" }
-				  }
-				}
-				""").messageId(UUID.randomUUID().toString()).build();
+	void shouldNotMapSnsAttributesByDefault() {
+		Message message = Message.builder().messageId(UUID.randomUUID().toString()).body("""
+				{"Type":"Notification","Message":"payload",
+				 "MessageAttributes":{"attribute":{"Type":"String","Value":"snsValue"}}}
+				""").build();
 
-		MessageHeaders headers = mapper.toHeaders(message);
-
-		assertThat(headers.get("stringAttribute")).isEqualTo("myString");
-		assertThat(headers.get("numberAttribute")).isEqualTo(10);
-		assertThat(headers.get("binaryAttribute")).isEqualTo(SdkBytes.fromUtf8String("myBinary"));
-	}
-
-	@Test
-	void shouldPreferSqsMessageAttributesOverSnsMessageAttributes() {
-		SqsHeaderMapper mapper = new SqsHeaderMapper();
-		Message message = Message.builder().body("""
-				{
-				  "Type": "Notification",
-				  "Message": "payload",
-				  "MessageAttributes": {
-				    "attribute": { "Type": "String", "Value": "snsValue" }
-				  }
-				}
-				""")
-				.messageAttributes(
-						Map.of("attribute",
-								MessageAttributeValue.builder().dataType(MessageAttributeDataTypes.STRING)
-										.stringValue("sqsValue").build()))
-				.messageId(UUID.randomUUID().toString()).build();
-
-		MessageHeaders headers = mapper.toHeaders(message);
-
-		assertThat(headers.get("attribute")).isEqualTo("sqsValue");
-	}
-
-	@Test
-	void shouldIgnoreMessageAttributesInNonSnsPayload() {
-		SqsHeaderMapper mapper = new SqsHeaderMapper();
-		Message message = Message.builder().body("""
-				{
-				  "Type": "ApplicationEvent",
-				  "Message": "payload",
-				  "MessageAttributes": {
-				    "attribute": { "Type": "String", "Value": "value" }
-				  }
-				}
-				""").messageId(UUID.randomUUID().toString()).build();
-
-		MessageHeaders headers = mapper.toHeaders(message);
-
-		assertThat(headers).doesNotContainKey("attribute");
+		assertThat(new SqsHeaderMapper().toHeaders(message)).doesNotContainKey("attribute");
 	}
 
 	@Test
